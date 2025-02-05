@@ -38,7 +38,7 @@ async function main() {
             }
         })
 
-        await new Promise(r => setTimeout(r, 3000));
+        await new Promise(r => setTimeout(r, 9000));
     }
 }
 
