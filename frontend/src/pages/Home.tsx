@@ -30,7 +30,7 @@ export default function Home() {
       <BackgroundLines className="custom-class" svgOptions={{ duration: 5 }}>
         <div className="text-white flex flex-col justify-center items-center h-screen">
           <div className="font-mono text-7xl">Zapier</div>
-          <div className="pt-3">Automate your workflow</div>
+          <div className="pt-3 text-4xl">Automate your workflow</div>
         </div>
       </BackgroundLines>
     </div>

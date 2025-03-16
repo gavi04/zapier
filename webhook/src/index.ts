@@ -14,7 +14,7 @@ app.post("/hook/catch/:userId/:zapId",async (req,res)=>{
         const run = await tx.zapRun.create({
             data: {
                 zapId:zapId,
-                metadata:body
+                metadata:body  
             }
         });
         console.log("2");

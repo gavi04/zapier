@@ -1,0 +1,5 @@
+-- AlterTable
+ALTER TABLE "Zap" ADD COLUMN     "ownerId" INTEGER NOT NULL DEFAULT 0;
+
+-- AddForeignKey
+ALTER TABLE "Zap" ADD CONSTRAINT "Zap_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;

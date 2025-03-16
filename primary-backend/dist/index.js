@@ -15,9 +15,14 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const client_1 = require("@prisma/client");
 const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
+const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const app = (0, express_1.default)();
 app.use(express_1.default.json());
-app.use((0, cors_1.default)());
+app.use((0, cors_1.default)({
+    origin: 'http://localhost:5173', // Replace with your frontend URL
+    credentials: true
+}));
+app.use((0, cookie_parser_1.default)());
 const client = new client_1.PrismaClient();
 app.post("/api/v1/signup", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -29,7 +34,18 @@ app.post("/api/v1/signup", (req, res) => __awaiter(void 0, void 0, void 0, funct
                 password: details.password,
             },
         });
-        res.json(user);
+        if (user) {
+            res.cookie('user', user.id, {
+                httpOnly: true,
+                secure: process.env.NODE_ENV === 'production', // true in production
+                sameSite: 'strict',
+                maxAge: 24 * 60 * 60 * 1000 // 24 hours
+            });
+            res.json(user);
+        }
+        else {
+            res.status(401).json({ error: "Invalid email or password" });
+        }
     }
     catch (error) {
         console.error("Error creating user:", error);
@@ -65,6 +81,59 @@ app.get("/api/v1/availableactions", (req, res) => __awaiter(void 0, void 0, void
     });
     console.log(data);
     res.json(data);
+}));
+app.post("/api/v1/createzap", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    const ownerId = parseInt(req.body.ownerId);
+    // const userId = parseInt(req.body.ownerId);
+    const zapId = yield client.zap.create({
+        data: {
+            name: req.body.name,
+            ownerId: ownerId,
+        }
+    });
+    console.log(zapId);
+    const ZapTrigger = yield client.trigger.create({
+        data: {
+            zapId: zapId.id,
+            typeId: req.body.triggerId,
+        }
+    });
+    console.log(ZapTrigger);
+    const ZapActions = yield client.action.create({
+        data: {
+            zapId: zapId.id,
+            actionId: req.body.actionId,
+        }
+    });
+    console.log(ZapActions);
+    res.json({ zapId });
+}));
+app.get("/api/v1/zaps/:userId", (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const userId = parseInt(req.params.userId);
+        const zaps = yield client.zap.findMany({
+            where: {
+                ownerId: userId
+            },
+            include: {
+                trigger: {
+                    include: {
+                        type: true
+                    }
+                },
+                actions: {
+                    include: {
+                        action: true
+                    }
+                }
+            }
+        });
+        res.json(zaps);
+    }
+    catch (error) {
+        console.error("Error fetching zaps:", error);
+        res.status(500).json({ error: "Failed to fetch zaps" });
+    }
 }));
 app.listen(3003, () => {
     console.log("Server is running on http://localhost:3003");

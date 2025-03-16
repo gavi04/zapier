@@ -17,6 +17,7 @@ model User {
   name      String?
   email     String   @unique
   password  String  
+  zaps      Zap[]
 }
 
 model Zap {
@@ -25,12 +26,14 @@ model Zap {
   trigger   Trigger?
   actions   Action[]
   zapRun ZapRun[]
+  ownerId   Int @default(autoincrement()) 
+  user      User @relation(fields: [ownerId], references: [id])
 }
 
 model Trigger {
   id        String           @id @default(uuid())
   zapId     String           @unique
-  typeId    String           @unique
+  typeId    String           
   zap       Zap              @relation(fields: [zapId], references: [id])
   type      AvailableTrigger @relation(fields: [typeId], references: [id])
 }
@@ -43,8 +46,7 @@ model AvailableTrigger {
 
 model Action {
   id        Int            @id @default(autoincrement())
-  name      String
-  zapId     String?
+  zapId     String?        
   actionId  String?
   zap       Zap?           @relation(fields: [zapId], references: [id])
   action    AvailableAction? @relation(fields: [actionId], references: [id])
