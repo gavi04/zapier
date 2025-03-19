@@ -15,6 +15,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const client_1 = require("@prisma/client");
 const kafkajs_1 = require("kafkajs");
 const nodemailer_1 = __importDefault(require("nodemailer"));
+const notion_1 = require("./notion");
 const TOPIC_NAME = "test-topic";
 const client = new client_1.PrismaClient();
 const kafka = new kafkajs_1.Kafka({
@@ -25,18 +26,19 @@ function sendEmail(zapRunId) {
     return __awaiter(this, void 0, void 0, function* () {
         console.log("Processing zapRunId:", zapRunId);
         let data = yield client.zapRun.findMany({
-            where: {
-                id: zapRunId,
-            },
-            select: {
-                metadata: true
-            }
+            where: { id: zapRunId },
+            select: { metadata: true }
         });
         if (data.length === 0) {
             console.error("No data found for zapRunId:", zapRunId);
             return;
         }
+        console.log("Fetched metadata:", data[0].metadata);
         let meta = data[0].metadata;
+        if (!(meta === null || meta === void 0 ? void 0 : meta.to)) {
+            console.error("❌ Email recipient is missing:", meta);
+            return;
+        }
         let transporter = nodemailer_1.default.createTransport({
             service: 'gmail',
             auth: {
@@ -45,17 +47,16 @@ function sendEmail(zapRunId) {
             }
         });
         let mailOptions = {
-            // from: process.env.EMAIL_USER,
-            to: meta === null || meta === void 0 ? void 0 : meta.email,
-            subject: meta === null || meta === void 0 ? void 0 : meta.subject,
-            text: meta === null || meta === void 0 ? void 0 : meta.text,
+            to: meta.to,
+            subject: meta.subject || "No Subject",
+            text: meta.text || "No Text",
         };
         try {
-            yield transporter.sendMail(mailOptions);
-            console.log("Email sent successfully to:", meta === null || meta === void 0 ? void 0 : meta.email);
+            let info = yield transporter.sendMail(mailOptions);
+            console.log("✅ Email sent successfully:", info.response);
         }
         catch (error) {
-            console.error("Error sending email:", error);
+            console.error("❌ Error sending email:", error);
         }
     });
 }
@@ -75,9 +76,39 @@ function main() {
                 if (message.value) {
                     const zapRunId = JSON.parse(message.value.toString()).zapRunId;
                     console.log("Received zapRunId:", zapRunId);
-                    // Call sendEmail only when zapRunId is available
-                    if (zapRunId) {
-                        yield sendEmail(zapRunId);
+                    console.log("Searching for zapId in action table:", zapRunId);
+                    let data1 = yield client.zapRun.findMany({
+                        where: { id: zapRunId },
+                        select: { zapId: true }
+                    });
+                    let zapRunId1 = data1[0].zapId;
+                    let data = yield client.action.findMany({
+                        where: { zapId: zapRunId1 },
+                        select: { actionId: true }
+                    });
+                    console.log("Fetched action data:", data);
+                    if (data.length === 0) {
+                        console.error("No data found for zapRunId:", zapRunId);
+                        return;
+                    }
+                    if (data[0].actionId == "ffba60fa-471d-44d1-858d-a971e670493a") {
+                        console.log("Notion");
+                        let data = yield client.zapRun.findMany({
+                            where: { id: zapRunId },
+                            select: { metadata: true }
+                        });
+                        if (data.length === 0) {
+                            console.error("No data found for zapRunId:", zapRunId);
+                            return;
+                        }
+                        console.log("Fetched metadata:", data[0].metadata);
+                        let meta = data[0].metadata;
+                        (0, notion_1.notionfxn)(meta);
+                    }
+                    else {
+                        if (zapRunId) {
+                            yield sendEmail(zapRunId);
+                        }
                     }
                 }
             }),

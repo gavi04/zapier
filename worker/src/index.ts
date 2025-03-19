@@ -1,6 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { Kafka } from 'kafkajs';
 import nodemailer from 'nodemailer';
+import { notionfxn } from './notion';
 
 
 
@@ -16,12 +17,8 @@ async function sendEmail(zapRunId: string) {
   console.log("Processing zapRunId:", zapRunId);
   
   let data = await client.zapRun.findMany({
-    where: {
-      id: zapRunId,
-    },
-    select: {
-      metadata: true
-    }
+    where: { id: zapRunId },
+    select: { metadata: true }
   });
 
   if (data.length === 0) {
@@ -29,30 +26,38 @@ async function sendEmail(zapRunId: string) {
     return;
   }
 
-  let meta: any = data[0].metadata as { email: string };
+  console.log("Fetched metadata:", data[0].metadata);
+
+  let meta: any = data[0].metadata as { email?: string; subject?: string; text?: string };
+
+  if (!meta?.to) {
+    console.error("❌ Email recipient is missing:", meta);    
+    return;
+  }
 
   let transporter = nodemailer.createTransport({
     service: 'gmail',
     auth: {
       user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS
+      pass: process.env.EMAIL_PASS
     }
   });
 
   let mailOptions = {
-    // from: process.env.EMAIL_USER,
-    to: meta?.email,
-    subject: meta?.subject,
-    text: meta?.text,
+    to: meta.to,
+    subject: meta.subject || "No Subject",
+    text: meta.text || "No Text",
   };
 
   try {
-    await transporter.sendMail(mailOptions);
-    console.log("Email sent successfully to:", meta?.email);
+    let info = await transporter.sendMail(mailOptions);
+    console.log("✅ Email sent successfully:", info.response);
   } catch (error) {
-    console.error("Error sending email:", error);
+    
+    console.error("❌ Error sending email:", error);
   }
 }
+
 
 async function main() {
   const consumer = kafka.consumer({ groupId: 'main-worker' });
@@ -71,10 +76,51 @@ async function main() {
         const zapRunId = JSON.parse(message.value.toString()).zapRunId;
         console.log("Received zapRunId:", zapRunId);
 
-        // Call sendEmail only when zapRunId is available
-        if (zapRunId) {
-          await sendEmail(zapRunId);
+        console.log("Searching for zapId in action table:", zapRunId);
+
+        let data1 = await client.zapRun.findMany({
+          where: { id: zapRunId },
+          select: { zapId: true }
+        });
+        let zapRunId1 = data1[0].zapId
+
+
+        
+        let data = await client.action.findMany({
+        where: { zapId: zapRunId1 },
+        select: { actionId: true }
+        });
+console.log("Fetched action data:", data);
+
+        if (data.length === 0) {
+          console.error("No data found for zapRunId:", zapRunId);
+          return;
         }
+
+        if(data[0].actionId=="ffba60fa-471d-44d1-858d-a971e670493a"){
+          console.log("Notion")
+
+          let data = await client.zapRun.findMany({
+            where: { id: zapRunId },
+            select: { metadata: true }
+          });
+        
+          if (data.length === 0) {
+            console.error("No data found for zapRunId:", zapRunId);
+            return;
+          }
+        
+          console.log("Fetched metadata:", data[0].metadata);
+        
+          let meta: any = data[0].metadata as { text?:string };
+
+          notionfxn(meta)
+        }
+        else{
+          if (zapRunId) {
+            await sendEmail(zapRunId);
+          }
+        }       
       }
     },
   });
